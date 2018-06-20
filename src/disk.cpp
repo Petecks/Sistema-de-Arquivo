@@ -1,13 +1,13 @@
 
-#include <stdio.h>
-#include <stdlib.h>
+#include <cstdio>
+#include <cstdlib>
 #include <unistd.h>
-#include <errno.h>
-#include <string.h>
-
+#include <cerrno>
+#include <cstring>
+#include <iostream>
 #include "disk.h"
 
-#define DISK_MAGIC 0xdeadbeef
+const unsigned int DISK_MAGIC = 0xdeadbeef;
 
 static FILE *diskfile;
 static int nblocks=0;
@@ -37,17 +37,17 @@ int disk_size()
 static void sanity_check( int blocknum, const void *data )
 {
 	if(blocknum<0) {
-		printf("ERROR: blocknum (%d) is negative!\n",blocknum);
+		std::cout << "ERROR: blocknum (" << blocknum << ") is negative!" << std::endl;
 		abort();
 	}
 
 	if(blocknum>=nblocks) {
-		printf("ERROR: blocknum (%d) is too big!\n",blocknum);
+		std::cout << "ERROR: blocknum ("<< blocknum <<") is too big!" << std::endl;
 		abort();
 	}
 
 	if(!data) {
-		printf("ERROR: null data pointer!\n");
+		std::cout << "ERROR: null data pointer!" << std::endl;
 		abort();
 	}
 }
@@ -61,7 +61,7 @@ void disk_read( int blocknum, char *data )
 	if(fread(data,DISK_BLOCK_SIZE,1,diskfile)==1) {
 		nreads++;
 	} else {
-		printf("ERROR: couldn't access simulated disk: %s\n",strerror(errno));
+		std::cout << "ERROR: couldn't access simulated disk: " << strerror(errno) << std::endl;
 		abort();
 	}
 }
@@ -75,7 +75,7 @@ void disk_write( int blocknum, const char *data )
 	if(fwrite(data,DISK_BLOCK_SIZE,1,diskfile)==1) {
 		nwrites++;
 	} else {
-		printf("ERROR: couldn't access simulated disk: %s\n",strerror(errno));
+		std::cout << "ERROR: couldn't access simulated disk: " << strerror(errno) << std::endl;
 		abort();
 	}
 }
@@ -83,10 +83,9 @@ void disk_write( int blocknum, const char *data )
 void disk_close()
 {
 	if(diskfile) {
-		printf("%d disk block reads\n",nreads);
-		printf("%d disk block writes\n",nwrites);
+		std::cout << nreads << " disk block reads" << std::endl;
+		std::cout << nwrites << " disk block writes" << std::endl;
 		fclose(diskfile);
 		diskfile = 0;
 	}
 }
-
