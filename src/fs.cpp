@@ -2,6 +2,7 @@
 #include "fs.h"
 #include "disk.h"
 
+#include <iostream>
 #include <cstdio>
 #include <cstdlib>
 #include <cerrno>
@@ -44,10 +45,25 @@ void fs_debug()
 
 	disk_read(0,block.data);
 
-	printf("superblock:\n");
-	printf("    %d blocks\n",block.super.nblocks);
-	printf("    %d inode blocks\n",block.super.ninodeblocks);
-	printf("    %d inodes\n",block.super.ninodes);
+	// SUPERBLOCK
+
+	// Condicional para verificar se o numero mágico no superblock é váido.
+	// Caso o numero mágico não for vãlido, retorna com erro.
+	if (block.super.magic != static_cast<int>(FS_MAGIC)){
+		std::cout << "	magic number is not valid" << std::endl;
+		return;
+	}
+	// Imprime informações acerca do superblock: nblocks,ninodeblocks,ninodes.
+	std::cout << "superblock: " << std::endl;
+	std::cout << "    magic number is valid" << std::endl;
+	std::cout << "    " << block.super.nblocks << " blocks" << std::endl;
+	std::cout << "    " << block.super.ninodeblocks << " inode blocks" << std::endl;
+	std::cout << "    " << block.super.ninodes << " inodes" << std::endl;
+
+	// INODE BLOCK
+	//union fs_block block;
+
+	//diskread(1,data)
 }
 
 int fs_mount()
