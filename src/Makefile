@@ -6,7 +6,7 @@ simplefs: shell.o fs.o disk.o
 shell.o: shell.cpp
 	$(GCC) -Wall shell.cpp -c -o shell.o -g
 
-fs.o: fs.c fs.h
+fs.o: fs.cpp fs.h
 	$(GCC) -Wall fs.cpp -c -o fs.o -g
 
 disk.o: disk.cpp disk.h
