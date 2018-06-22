@@ -61,9 +61,46 @@ void fs_debug()
 	std::cout << "    " << block.super.ninodes << " inodes" << std::endl;
 
 	// INODE BLOCK
-	//union fs_block block;
 
-	//diskread(1,data)
+	//Varredura sobre blocos de dados inodos.
+	for( int n_inode_block = 1 ; n_inode_block <= block.super.ninodeblocks ; n_inode_block ++){
+		union fs_block _inode;					// instância de uma unios que será o inodo.
+		disk_read(n_inode_block,_inode.data);		// recebe o bloco de inodos.
+
+		// varredura no bloco de inodo
+		for (unsigned int _n_inodes = 0; _n_inodes < INODES_PER_BLOCK ; _n_inodes++){
+
+			//verifica se o inodo contém algum dado valido
+			if (_inode.inode[_n_inodes].isvalid){
+				std::cout << "inode " << _n_inodes << ":" << std::endl;
+				std::cout << "    " <<  "size: " << _inode.inode[_n_inodes].size << " bytes" << std::endl;
+				std::cout << "    " <<  "direct blocks: ";
+
+				//varredura dos inodos dentro do bloco de inodo
+				for (unsigned int _direct = 0 ; _direct < POINTERS_PER_INODE ; _direct ++){
+					//imprime os valores dos blocos diretos, se houver
+					if (_inode.inode[_n_inodes].direct[_direct])	std::cout << _inode.inode[_n_inodes].direct[_direct] <<  " ";
+				}
+				std::cout << std::endl;
+
+				// verifica os blocos indiretos, se houver, imprime ele.
+				if (_inode.inode[_n_inodes].indirect){
+					std::cout << "    indirect block: " << _inode.inode[_n_inodes].indirect << std::endl;
+					std::cout << "    indirect data blocks: ";
+					// declada a nova union para acessar os ponteiros indiretos.
+					union fs_block _indirect_block;
+					// leitura da estrutura de blocos indiretos.
+					disk_read(_inode.inode[_n_inodes].indirect,_indirect_block.data);
+					// laço para cada bloco de dado indireto sendo imprimido (se houver)
+					for (unsigned int _indirect = 0 ; _indirect < POINTERS_PER_BLOCK ; _indirect ++){
+						if (_indirect_block.pointers[_indirect])	std::cout << _indirect_block.pointers[_indirect] <<  " ";
+					}
+					std::cout << std::endl;
+				}
+			}
+		}
+	}
+
 }
 
 int fs_mount()

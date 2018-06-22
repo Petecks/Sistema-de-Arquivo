@@ -14,3 +14,12 @@ disk.o: disk.cpp disk.h
 
 clean:
 	rm simplefs disk.o fs.o shell.o
+
+run20:
+	./simplefs image.20 20
+
+run5:
+	./simplefs image.5 5
+
+run200:
+	./simplefs image.200 200
