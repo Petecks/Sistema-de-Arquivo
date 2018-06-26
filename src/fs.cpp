@@ -7,11 +7,14 @@
 #include <cstdlib>
 #include <cerrno>
 #include <unistd.h>
+#include <vector>
 
 const unsigned int FS_MAGIC           = 0xf0f03410;
 const unsigned int INODES_PER_BLOCK   = 128;
 const unsigned int POINTERS_PER_INODE = 5;
 const unsigned int POINTERS_PER_BLOCK = 1024;
+
+std::vector<bool> bitmap;
 
 struct fs_superblock {
 	int magic;
@@ -34,10 +37,99 @@ union fs_block {
 	char data[DISK_BLOCK_SIZE];
 };
 
-int fs_format()
-{
+// FUNÇÕES AUXILIARES PARA fs.cpp
+
+bool bitmap_is_valid(){
+	return bitmap.size();
+}
+void set_bitmap(){
+	bitmap.resize(disk_size());
+	union fs_block block;
+	disk_read(0,block.data);		// recebe o bloco de inodos.
+	//Varredura sobre blocos de dados inodos.
+	for( int n_inode_block = 0 ; n_inode_block <= block.super.ninodeblocks ; n_inode_block ++){
+		bitmap[n_inode_block] = true;
+
+		union fs_block _inode;					// instância de uma unios que será o inodo.
+		disk_read(n_inode_block,_inode.data);		// recebe o bloco de inodos.
+		// varredura no bloco de inodo
+		for (unsigned int _n_inodes = 0; _n_inodes < INODES_PER_BLOCK ; _n_inodes++){
+
+			//verifica se o inodo contém algum dado valido
+			if (_inode.inode[_n_inodes].isvalid){
+
+				//varredura dos inodos dentro do bloco de inodo
+				for (unsigned int _direct = 0 ; _direct < POINTERS_PER_INODE ; _direct ++){
+					//imprime os valores dos blocos diretos, se houver
+					if (_inode.inode[_n_inodes].direct[_direct])	bitmap[_inode.inode[_n_inodes].direct[_direct]] = true;
+				}
+
+				// verifica os blocos indiretos, se houver, imprime ele.
+				if (_inode.inode[_n_inodes].indirect){
+					bitmap[_inode.inode[_n_inodes].indirect] = true;
+					// declada a nova union para acessar os ponteiros indiretos.
+					union fs_block _indirect_block;
+					// leitura da estrutura de blocos indiretos.
+					disk_read(_inode.inode[_n_inodes].indirect,_indirect_block.data);
+					// laço para cada bloco de dado indireto sendo imprimido (se houver)
+					for (unsigned int _indirect = 0 ; _indirect < POINTERS_PER_BLOCK ; _indirect ++){
+						if (_indirect_block.pointers[_indirect]) 	bitmap[_indirect_block.pointers[_indirect]] = true;
+					}
+				}
+			}
+		}
+	}
+	// VERIFICADOR DE bitmap
+	for (unsigned int i = 0 ; i < bitmap.size() ; i ++)	std::cout << "block :" << i << ". state: " << bitmap[i] << std:: endl;
+}
+
+
+//FIM DAS FUNÇÕES AUXILIARES -------------------------------------------
+
+
+int fs_format(){
+	std::cout << "before format:" << std::endl;
+
+	if (!bitmap_is_valid()) set_bitmap();
+	union fs_block block;
+	disk_read(0,block.data);		// recebe o bloco de inodos.
+
+	// começa a iteração apos os blocos inodos. Limpa todos os blocos subsequentes.
+	for(unsigned int i = block.super.ninodeblocks + 1 ; i < bitmap.size() ; i++){
+		bitmap[i] = false;
+	}
+
+//LIMPANDO OS INODE BLOCKS
+
+//Varredura sobre blocos de dados inodos.
+for( int n_inode_block = 1 ; n_inode_block <= block.super.ninodeblocks ; n_inode_block ++){
+	union fs_block _inode;					// instância de uma unios que será o inodo.
+	disk_read(n_inode_block,_inode.data);		// recebe o bloco de inodos.
+
+	// varredura no bloco de inodo
+	for (unsigned int _n_inodes = 0; _n_inodes < INODES_PER_BLOCK ; _n_inodes++){
+
+		//verifica se o inodo contém algum dado valido
+		if (_inode.inode[_n_inodes].isvalid){
+			_inode.inode[_n_inodes].isvalid = 0;
+
+			//varredura dos inodos dentro do bloco de inodo
+			for (unsigned int _direct = 0 ; _direct < POINTERS_PER_INODE ; _direct ++){
+				//imprime os valores dos blocos diretos, se houver
+				_inode.inode[_n_inodes].direct[_direct] = 0;
+			}
+				_inode.inode[_n_inodes].indirect = 0;
+			}
+		}
+		disk_write(n_inode_block,_inode.data);
+	}
+
+	std::cout << "after format:" << std::endl;
+	//imprime o bitmap
+	for (unsigned int i = 0 ; i < bitmap.size() ; i ++)	std::cout << "block :" << i << ". state: " << bitmap[i] << std::endl;
 	return 0;
 }
+
 
 void fs_debug()
 {
@@ -101,6 +193,7 @@ void fs_debug()
 		}
 	}
 }
+
 
 int fs_mount()
 {
