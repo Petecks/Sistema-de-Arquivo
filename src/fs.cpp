@@ -100,7 +100,6 @@ void fs_debug()
 			}
 		}
 	}
-
 }
 
 int fs_mount()
