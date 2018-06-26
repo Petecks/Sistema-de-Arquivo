@@ -23,3 +23,5 @@ run5:
 
 run200:
 	./simplefs image.200 200
+
+	
