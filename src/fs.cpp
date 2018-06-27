@@ -267,6 +267,28 @@ int fs_create()
 
 int fs_delete( int inumber )
 {
+	union fs_block block;
+
+	disk_read(0,block.data);
+
+	union fs_block _inode;	// instância de uma unios que será o inodo.
+	//leitura de disco a partir do bloco informado (multiplo de INODES_PER_BLOCK)
+	disk_read(1 + (inumber / static_cast<int>(INODES_PER_BLOCK)) ,_inode.data);		// recebe o bloco de inodos.
+
+	//verifica se o inodo esta vazio(nao for valido)
+	if (_inode.inode[inumber % INODES_PER_BLOCK].isvalid){
+
+		// configurações iniciais zeradas.
+		_inode.inode[inumber % INODES_PER_BLOCK].isvalid = 0;
+		_inode.inode[inumber % INODES_PER_BLOCK].size = 0;
+		for (unsigned int i = 0; i < INODES_PER_BLOCK ; i++)	_inode.inode[inumber % INODES_PER_BLOCK].direct[i] = 0;
+		_inode.inode[inumber % INODES_PER_BLOCK].indirect = 0;
+
+		// escreve no disco as informções modificadas
+		disk_write(1 + (inumber / static_cast<int>(INODES_PER_BLOCK)),_inode.data);
+		// retorna o numero do inodo criado.
+		return 1;
+	}
 	return 0;
 }
 
