@@ -117,20 +117,22 @@ int fs_format(){
 		bitmap[i] = false;
 	}
 	*/
-//LIMPANDO OS INODE BLOCKS
+	//LIMPANDO OS INODE BLOCKS
 
-//Varredura sobre blocos de dados inodos.
-for( int n_inode_block = 1 ; n_inode_block <= block.super.ninodeblocks ; n_inode_block ++){
-	union fs_block _inode;					// instância de uma union que será o inodo.
-	disk_read(n_inode_block,_inode.data);		// recebe o bloco de inodos do laço.
+	//Varredura sobre blocos de dados inodos.
+	union fs_block block;
+	disk_read(0,block.data);
+	for( int n_inode_block = 1 ; n_inode_block <= block.super.ninodeblocks ; n_inode_block ++){
+		union fs_block _inode;					// instância de uma union que será o inodo.
+		disk_read(n_inode_block,_inode.data);		// recebe o bloco de inodos do laço.
 
-	// varredura de inodo
-	for (unsigned int _n_inodes = 0; _n_inodes < INODES_PER_BLOCK ; _n_inodes++){
+		// varredura de inodo
+		for (unsigned int _n_inodes = 0; _n_inodes < INODES_PER_BLOCK ; _n_inodes++){
 
-		//verifica se o inodo contém algum dado valido, para zerar as suas informações.
-		if (_inode.inode[_n_inodes].isvalid){
-			_inode.inode[_n_inodes].isvalid = 0;
-			_inode.inode[_n_inodes].size = 0;
+			//verifica se o inodo contém algum dado valido, para zerar as suas informações.
+			if (_inode.inode[_n_inodes].isvalid){
+				_inode.inode[_n_inodes].isvalid = 0;
+				_inode.inode[_n_inodes].size = 0;
 			//varredura dos inodos dentro do bloco de inodo, para os ponteiros diretos
 			for (unsigned int _direct = 0 ; _direct < POINTERS_PER_INODE ; _direct ++){
 				// zera as informações dos dados de blocos diretos.
@@ -143,7 +145,6 @@ for( int n_inode_block = 1 ; n_inode_block <= block.super.ninodeblocks ; n_inode
 		// escreve no disco as informções modificadas
 		disk_write(n_inode_block,_inode.data);
 	}
-
 	std::cout << "after format:" << std::endl;
 	//imprime o bitmap apos a formatação
 	for (unsigned int i = 0 ; i < bitmap.size() ; i ++)	std::cout << "block :" << i << ". state: " << bitmap[i] << std::endl;
@@ -225,13 +226,42 @@ int fs_mount()
 		std::cout << "	magic number is not valid" << std::endl;
 		return 0;
 	}
-	// se o bitmap nao for valido (tamanho zero), configura ele. 
+	// se o bitmap nao for valido (tamanho zero), configura ele.
 	if (!bitmap_is_valid()) set_bitmap();
 	return 1;
 }
 
 int fs_create()
 {
+	union fs_block block;
+
+	disk_read(0,block.data);
+
+	//Varredura sobre blocos de dados inodos.
+	for( int n_inode_block = 1 ; n_inode_block <= block.super.ninodeblocks ; n_inode_block ++){
+		union fs_block _inode;					// instância de uma unios que será o inodo.
+		disk_read(n_inode_block,_inode.data);		// recebe o bloco de inodos.
+
+		// varredura no bloco de inodo, 0 não pode ser um inodo valido.
+		for (unsigned int _n_inodes = 1; _n_inodes < INODES_PER_BLOCK ; _n_inodes++){
+
+			//verifica se o inodo esta vazio(nao for valido)
+			if (!_inode.inode[_n_inodes].isvalid){
+
+				// configurações iniciais zeradas.
+				_inode.inode[_n_inodes].isvalid = 1;
+				_inode.inode[_n_inodes].size = 0;
+				for (unsigned int i = 0; i < INODES_PER_BLOCK ; i++)	_inode.inode[_n_inodes].direct[i] = 0;
+				_inode.inode[_n_inodes].indirect = 0;
+
+				// escreve no disco as informções modificadas
+				disk_write(n_inode_block,_inode.data);
+				// retorna o numero do inodo criado.
+				return _n_inodes;
+			}
+		}
+	}
+	// todos os inodos ocupados ou falha.
 	return 0;
 }
 
