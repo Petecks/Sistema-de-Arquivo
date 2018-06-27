@@ -87,7 +87,23 @@ void set_bitmap(){
 //FIM DAS FUNÇÕES AUXILIARES -------------------------------------------
 
 
+// A função fs_format não precisa necessariamente apgar todos os dados existentes
+// basta que a os ponteiros para os blocos de dados sejam desrreferenciados.
+// Os ponteiros a serem desrreferenciados serão:
+// 	5 ponteiros direct.
+// 	1 ponteiro indirect.
+// Além de zerar informações dos inodos como:
+// 	size = 0;
+// 	isvalid = 0;
+
+
+ // ** FALTA CONDIÇÕES DE FALHA **
+ // 	 - FORMATAR DISCO JA MONTADO DEVE RETORNAR FALHA.
+//		 - RETORNA FALHA CASO  NAO CONSIGA FORMATAR.
+
 int fs_format(){
+
+	// Imprime os blocos de dados antes de serem formatados
 	std::cout << "before format:" << std::endl;
 
 	if (!bitmap_is_valid()) set_bitmap();
@@ -103,31 +119,33 @@ int fs_format(){
 
 //Varredura sobre blocos de dados inodos.
 for( int n_inode_block = 1 ; n_inode_block <= block.super.ninodeblocks ; n_inode_block ++){
-	union fs_block _inode;					// instância de uma unios que será o inodo.
-	disk_read(n_inode_block,_inode.data);		// recebe o bloco de inodos.
+	union fs_block _inode;					// instância de uma union que será o inodo.
+	disk_read(n_inode_block,_inode.data);		// recebe o bloco de inodos do laço.
 
-	// varredura no bloco de inodo
+	// varredura de inodo
 	for (unsigned int _n_inodes = 0; _n_inodes < INODES_PER_BLOCK ; _n_inodes++){
 
-		//verifica se o inodo contém algum dado valido
+		//verifica se o inodo contém algum dado valido, para zerar as suas informações.
 		if (_inode.inode[_n_inodes].isvalid){
 			_inode.inode[_n_inodes].isvalid = 0;
-
-			//varredura dos inodos dentro do bloco de inodo
+			_inode.inode[_n_inodes].size = 0;
+			//varredura dos inodos dentro do bloco de inodo, para os ponteiros diretos
 			for (unsigned int _direct = 0 ; _direct < POINTERS_PER_INODE ; _direct ++){
-				//imprime os valores dos blocos diretos, se houver
+				// zera as informações dos dados de blocos diretos.
 				_inode.inode[_n_inodes].direct[_direct] = 0;
 			}
+				// zera as informações do dado de bloco indireto.
 				_inode.inode[_n_inodes].indirect = 0;
 			}
 		}
+		// escreve no disco as informções modificadas
 		disk_write(n_inode_block,_inode.data);
 	}
 
 	std::cout << "after format:" << std::endl;
-	//imprime o bitmap
+	//imprime o bitmap apos a formatação
 	for (unsigned int i = 0 ; i < bitmap.size() ; i ++)	std::cout << "block :" << i << ". state: " << bitmap[i] << std::endl;
-	return 0;
+	return 1;
 }
 
 
