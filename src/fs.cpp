@@ -46,6 +46,8 @@ void set_bitmap(){
 	bitmap.resize(disk_size());
 	union fs_block block;
 	disk_read(0,block.data);		// recebe o bloco de inodos.
+
+
 	//Varredura sobre blocos de dados inodos.
 	for( int n_inode_block = 0 ; n_inode_block <= block.super.ninodeblocks ; n_inode_block ++){
 		bitmap[n_inode_block] = true;
@@ -98,15 +100,15 @@ void set_bitmap(){
 
 
  // ** FALTA CONDIÇÕES DE FALHA **
- // 	 - FORMATAR DISCO JA MONTADO DEVE RETORNAR FALHA.
 //		 - RETORNA FALHA CASO  NAO CONSIGA FORMATAR.
 
 int fs_format(){
 
 	// Imprime os blocos de dados antes de serem formatados
 	std::cout << "before format:" << std::endl;
-
-	if (!bitmap_is_valid()) set_bitmap();
+	// se i disco ja estiver montado (bitmap criado e configurado) retorna falha.
+	if (bitmap_is_valid()) return 0;
+	/* CASO TIVER QUE ZERAR O bitmap
 	union fs_block block;
 	disk_read(0,block.data);		// recebe o bloco de inodos.
 
@@ -114,7 +116,7 @@ int fs_format(){
 	for(unsigned int i = block.super.ninodeblocks + 1 ; i < bitmap.size() ; i++){
 		bitmap[i] = false;
 	}
-
+	*/
 //LIMPANDO OS INODE BLOCKS
 
 //Varredura sobre blocos de dados inodos.
@@ -212,10 +214,20 @@ void fs_debug()
 	}
 }
 
-
+// ** FALTA CONDIÇÕES DE FALHA **
+// 	- verificar se o disco esta presente.
 int fs_mount()
 {
-	return 0;
+	union fs_block block;
+	disk_read(0,block.data);
+	// verifica o numero magico, caso falha, retorna 0 e não faz nada.
+	if (block.super.magic != static_cast<int>(FS_MAGIC)){
+		std::cout << "	magic number is not valid" << std::endl;
+		return 0;
+	}
+	// se o bitmap nao for valido (tamanho zero), configura ele. 
+	if (!bitmap_is_valid()) set_bitmap();
+	return 1;
 }
 
 int fs_create()
