@@ -49,6 +49,7 @@ static void sanity_check (int blocknum, const void *data) {
 	}
 }
 
+//retorna em data os dados do bloco blocknum
 void disk_read (int blocknum, char *data) {
 	sanity_check (blocknum,data);
 

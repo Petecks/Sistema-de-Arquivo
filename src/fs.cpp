@@ -23,6 +23,8 @@ const unsigned int INODES_PER_BLOCK   = 128;
 const unsigned int POINTERS_PER_INODE = 5;
 const unsigned int POINTERS_PER_BLOCK = 1024;
 
+static bool MOUNTED = false;
+
 std::vector<bool> bitmap;
 
 struct fs_superblock {
@@ -45,6 +47,10 @@ union fs_block {
 	int pointers[POINTERS_PER_BLOCK];
 	char data[DISK_BLOCK_SIZE];
 };
+
+//class debug
+
+
 
 // FUNÇÕES AUXILIARES PARA fs.cpp
 
@@ -163,6 +169,12 @@ int fs_format () {
 
 
 void fs_debug () {
+
+	if (MOUNTED == false) {
+		std::cout << "Error: please mount first!" << std::endl;
+		return;
+	}
+
 	union fs_block block;
 
 	disk_read (0, block.data);
@@ -189,8 +201,11 @@ void fs_debug () {
 		union fs_block _inode;					// instância de uma unios que será o inodo.
 		disk_read(n_inode_block, _inode.data);		// recebe o bloco de inodos.
 
+
 		// varredura no bloco de inodo
 		for (unsigned int _n_inodes = 0; _n_inodes < INODES_PER_BLOCK; _n_inodes++) {
+
+
 
 			//verifica se o inodo contém algum dado valido
 			if (_inode.inode[_n_inodes].isvalid) {
@@ -226,7 +241,7 @@ void fs_debug () {
 
 // ** FALTA CONDIÇÕES DE FALHA **
 // 	- verificar se o disco esta presente.
-int fs_mount() {
+int fs_mount () {
 	union fs_block block;
 	disk_read (0, block.data);
 	// verifica o numero magico, caso falha, retorna 0 e não faz nada.
@@ -236,17 +251,25 @@ int fs_mount() {
 	}
 	// se o bitmap nao for valido (tamanho zero), configura ele.
 	if (!bitmap_is_valid ()) set_bitmap ();
+
+	MOUNTED = true;
 	return 1;
 }
 
 int fs_create () {
+
+	if (MOUNTED == false) {
+		std::cout << "Error: please mount first!" << std::endl;
+		return -1;
+	}
+
 	union fs_block block;
 
 	disk_read (0, block.data);
 
 	//Varredura sobre blocos de dados inodos.
 	for(int n_inode_block = 1; n_inode_block <= block.super.ninodeblocks; n_inode_block++) {
-		union fs_block _inode;					// instância de uma unios que será o inodo.
+		union fs_block _inode;					// instância de uma union que será o inodo.
 		disk_read (n_inode_block,_inode.data);		// recebe o bloco de inodos.
 
 		// varredura no bloco de inodo, 0 não pode ser um inodo valido.
@@ -254,11 +277,13 @@ int fs_create () {
 
 			//verifica se o inodo esta vazio(nao for valido)
 			if (!_inode.inode[_n_inodes].isvalid) {
-
+				//std::cout << "DEBUG " << n_inode_block << " " << _n_inodes << std::endl;		//debug
 				// configurações iniciais zeradas.
 				_inode.inode[_n_inodes].isvalid = 1;
 				_inode.inode[_n_inodes].size = 0;
-				for (unsigned int i = 0; i < INODES_PER_BLOCK; i++)	_inode.inode[_n_inodes].direct[i] = 0;
+
+				//TROQUEI INODES_PER_BLOCK POR POINTERS_PER_INODE
+				for (unsigned int i = 0; i < POINTERS_PER_INODE; i++)	_inode.inode[_n_inodes].direct[i] = 0;
 				_inode.inode[_n_inodes].indirect = 0;
 
 				// escreve no disco as informções modificadas
@@ -273,6 +298,12 @@ int fs_create () {
 }
 
 int fs_delete(int inumber) {
+
+	if (MOUNTED == false) {
+		std::cout << "Error: please mount first!" << std::endl;
+		return -1;
+	}
+
 	union fs_block block;
 
 	disk_read (0, block.data);
@@ -287,7 +318,9 @@ int fs_delete(int inumber) {
 		// configurações iniciais zeradas.
 		_inode.inode[inumber % INODES_PER_BLOCK].isvalid = 0;
 		_inode.inode[inumber % INODES_PER_BLOCK].size = 0;
-		for (unsigned int i = 0; i < INODES_PER_BLOCK; i++)	_inode.inode[inumber % INODES_PER_BLOCK].direct[i] = 0;
+
+		//troquei INODES PER BLOCK POR POINTERS PER INODE
+		for (unsigned int i = 0; i < POINTERS_PER_INODE; i++)	_inode.inode[inumber % INODES_PER_BLOCK].direct[i] = 0;
 		_inode.inode[inumber % INODES_PER_BLOCK].indirect = 0;
 
 		// escreve no disco as informções modificadas
@@ -298,17 +331,76 @@ int fs_delete(int inumber) {
 	return 0;
 }
 
-int fs_getsize( int inumber )
-{
+int fs_getsize (int inumber) {
+
+	//retorna -1 caso nao tenha montado a imagem
+	if (MOUNTED == false) {
+		std::cout << "Error: please mount first!" << std::endl;
+		return -1;
+	}
+
+	//recebe o bloco de dados
+	union fs_block block;
+	disk_read (0, block.data);
+
+	unsigned int _n_blocks = 0;
+
+	//se o inumber eh valido
+	if (inumber < block.super.ninodes && block.inode[inumber/INODES_PER_BLOCK].isvalid) {
+		union fs_block _inode;
+
+		disk_read (inumber/INODES_PER_BLOCK + 1, _inode.data);
+
+		for (unsigned int _direct = 0; _direct < POINTERS_PER_INODE; _direct++) {
+			if (_inode.inode [inumber%INODES_PER_BLOCK].direct[_direct]) _n_blocks++;
+		}
+
+		if (_inode.inode[(inumber % static_cast <int> (INODES_PER_BLOCK))].indirect != 0) {
+			std::cout << "	piahedaoqujshfdoiuashdoiashd" << std::endl;
+			union fs_block _indirect;
+			disk_read (_inode.inode[(inumber % static_cast <int> (INODES_PER_BLOCK))].indirect, _indirect.data);
+			for (unsigned int n_indirect = 0; n_indirect < POINTERS_PER_BLOCK; n_indirect++) {
+				if (_indirect.pointers[n_indirect]) _n_blocks++;
+			}
+		}
+		return _n_blocks*4096;
+	}
+
 	return -1;
 }
 
-int fs_read( int inumber, char *data, int length, int offset )
-{
+int fs_read( int inumber, char *data, int length, int offset ) {
+
+	if (MOUNTED == false) {
+		std::cout << "Error: please mount first!" << std::endl;
+		return -1;
+	}
+
+	union fs_block _block;
+
+	disk_read (0, _block.data);
+	if (inumber == 0 || inumber > _block.super.ninodes) {
+		std::cout << "Erros: inumber invalid!" << std::endl;
+		return 0;
+	}
+
+	union fs_block _inode, _data_block;
+
+	disk_read (1 + (inumber/INODES_PER_BLOCK), _inode.data);
+
+
+
+
+
 	return 0;
 }
 
-int fs_write( int inumber, const char *data, int length, int offset )
-{
+int fs_write( int inumber, const char *data, int length, int offset ) {
+
+	if (MOUNTED == false) {
+		std::cout << "Error: please mount first!" << std::endl;
+		return -1;
+	}
+
 	return 0;
 }
