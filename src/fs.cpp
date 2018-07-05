@@ -440,7 +440,7 @@ int fs_read (int inumber, char *data, int length, int offset) {
 			// declada a nova union para acessar os ponteiros indiretos.
 			union fs_block _indirect_block;
 			// leitura da estrutura de blocos indiretos.
-			disk_read(_inode.inode[inumber%INODES_PER_BLOCK].indirect, _indirect_block.data);
+			disk_read (_inode.inode[inumber%INODES_PER_BLOCK].indirect, _indirect_block.data);
 			int indirect_initial = 0;
 
 			indirect_initial = ((offset + iterator)/DISK_BLOCK_SIZE - 5);
@@ -454,11 +454,11 @@ int fs_read (int inumber, char *data, int length, int offset) {
 
 				union fs_block _indirect_data;
 				//le o respectivo bloco indireto
-				disk_read(_indirect_block.pointers[_indirect], _indirect_data.data);
+				disk_read (_indirect_block.pointers[_indirect], _indirect_data.data);
 
 				std::cout << "indirect: " << _indirect << std::endl;
 				//copia para buffer o tanto de bytes a ser lido (byte_read)
-				std::memcpy(&data[iterator], &_indirect_data.data[0], bytes_read);
+				std::memcpy (&data[iterator], &_indirect_data.data[0], bytes_read);
 
 				bytes_remaining -= bytes_read;
 				length -= bytes_read;
@@ -471,12 +471,55 @@ int fs_read (int inumber, char *data, int length, int offset) {
 	return iterator;
 }
 
-int fs_write( int inumber, const char *data, int length, int offset ) {
+int fs_write (int inumber, const char *data, int length, int offset) {
+	//
+	// if (MOUNTED == false) {
+	// 	std::cout << "Error: please mount first!" << std::endl;
+	// 	return -1;
+	// }
+	//
+	union fs_block _block;
 
-	if (MOUNTED == false) {
-		std::cout << "Error: please mount first!" << std::endl;
-		return -1;
+	disk_read (0, _block.data);
+	if (inumber == 0 || inumber > _block.super.ninodes) {
+		std::cout << "Erros: inumber invalid!" << std::endl;
+		return 0;
 	}
+
+	if (!data) {
+		std::cout << "Erro: data invalid" << std::endl;
+		return 0;
+	}
+
+	bool all_bytes = false;
+
+	if (length%DISK_BLOCK_SIZE == 0) all_bytes = true;
+
+	union fs_block _inode;
+
+	union fs_block _data_block;
+
+	disk_read (1 + (inumber/INODES_PER_BLOCK), _inode.data);
+
+	int iterator = 0;
+	int last_block = 0;
+
+	if (offset/DISK_BLOCK_SIZE < 5) {
+		for (int i = offset/DISK_BLOCK_SIZE; i < 5; i++) {
+
+			disk_read(_inode.inode[inumber%INODES_PER_BLOCK].direct[i], _data_block.data);
+			std::memcpy(&_data_block.data, &data[iterator], DISK_BLOCK_SIZE);
+			iterator += DISK_BLOCK_SIZE;
+		}
+	}
+
+
+
+
+
+
+	//union fs_block _data_block;
+
 
 	return 0;
 }
