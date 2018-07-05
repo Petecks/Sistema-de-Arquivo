@@ -27,6 +27,8 @@ const unsigned int POINTERS_PER_BLOCK = 1024;
 static bool MOUNTED = false;
 
 std::vector<bool> bitmap;
+std::vector <bool> data_bitmap;
+std::vector <bool> inode_bitmap;
 
 struct fs_superblock {
 	int magic;
@@ -100,6 +102,17 @@ void set_bitmap () {
 	}
 	// VERIFICADOR DE bitmap
 	for (unsigned int i = 0; i < bitmap.size (); i++)	std::cout << "block :" << i << ". state: " << bitmap[i] << std::endl;
+}
+
+int get_empty () {
+	union fs_block _sblock;
+	disk_read (0, _sblock.data);
+	for (int i = _sblock.super.ninodeblocks + 1; i < sizeof(bitmap); i++) {
+		if (bitmap[i] == 0) {
+			bitmap[i] = 1;
+			return i;
+		}
+	}
 }
 
 
@@ -240,20 +253,145 @@ void fs_debug () {
 	}
 }
 
+
 // ** FALTA CONDIÇÕES DE FALHA **
 // 	- verificar se o disco esta presente.
-int fs_mount () {
+// int fs_mount () {
+// 	union fs_block block;
+// 	disk_read (0, block.data);
+// 	// verifica o numero magico, caso falha, retorna 0 e não faz nada.
+// 	if (block.super.magic != static_cast <int> (FS_MAGIC)) {
+// 		std::cout << "	magic number is not valid" << std::endl;
+// 		return 0;
+// 	}
+// 	// se o bitmap nao for valido (tamanho zero), configura ele.
+// 	if (!bitmap_is_valid ()) set_bitmap ();
+//
+// 	data_bitmap.resize(block.super.nblocks, 0);
+//
+//
+// 	for (int i = 0; i < block.super.ninodes; i++) {
+//
+// 		union fs_block inode;
+// 		disk_read(i/INODES_PER_BLOCK + 1, inode.data);
+//
+// 		if (inode.inode[i].isvalid) {
+//
+// 			for(int j = 0 ; j < POINTERS_PER_INODE; j++){
+// 				if(inode.inode[i%INODES_PER_BLOCK].direct[j] != 0){
+// 					data_bitmap[inode.inode[i%INODES_PER_BLOCK].direct[j]] = 1;
+//
+//
+// 				}
+// 			}
+//
+// 			if(inode.inode[i%INODES_PER_BLOCK].indirect != 0){
+//
+// 				data_bitmap[inode.inode[i%INODES_PER_BLOCK].indirect] = 1;
+// 				union fs_block indirect;
+// 				disk_read(inode.inode[i%INODES_PER_BLOCK].indirect, indirect.data);
+// 				for(int j = 0; j < POINTERS_PER_BLOCK; j++){
+// 					if(indirect.pointers[j] != 0){
+// 						data_bitmap[indirect.pointers[j]] = 1;
+// 					}
+// 				}
+// 			}
+// 		}
+// 	}
+//
+// 	data_bitmap[0] = 1;
+// 	for(int i = 0; i < block.super.ninodeblocks; i++)
+// 		data_bitmap[i+1] = 1;
+//
+// 	MOUNTED = true;
+// 	return 1;
+// }
+
+int fs_mount() {
+
+		union fs_block _block;
+		disk_read (0, _block.data);
+		// verifica o numero magico, caso falha, retorna 0 e não faz nada.
+		if (_block.super.magic != static_cast <int> (FS_MAGIC)) {
+			std::cout << "	magic number is not valid" << std::endl;
+			return 0;
+		}
+
+		// se o bitmap nao for valido (tamanho zero), configura ele.
+		if (!bitmap_is_valid ()) set_bitmap ();
+
+
 	union fs_block block;
-	disk_read (0, block.data);
-	// verifica o numero magico, caso falha, retorna 0 e não faz nada.
-	if (block.super.magic != static_cast <int> (FS_MAGIC)) {
-		std::cout << "	magic number is not valid" << std::endl;
+
+	disk_read(0,block.data);
+
+	data_bitmap.resize(block.super.nblocks, 0);
+	inode_bitmap.resize(block.super.ninodes, 0);
+
+	if(block.super.magic != FS_MAGIC){
+
 		return 0;
 	}
-	// se o bitmap nao for valido (tamanho zero), configura ele.
-	if (!bitmap_is_valid ()) set_bitmap ();
+
+
+
+
+
+	union fs_block inode;
+	for(int i = 0 ; i < block.super.ninodeblocks ; i++){
+		disk_read(i+1, inode.data);
+		for(int j = 0; j < INODES_PER_BLOCK; j++){
+			if(inode.inode[j].isvalid == 1){
+				inode_bitmap[i*INODES_PER_BLOCK + j] = 1;
+
+				}
+			else
+				inode_bitmap[i*INODES_PER_BLOCK + j] = 0;
+		}
+	}
+
+
+
+	for (int i = 0; i < block.super.ninodes; i++) {
+		if(inode_bitmap[i] == 1) {
+			disk_read(i/INODES_PER_BLOCK + 1, inode.data);
+			for(int j = 0 ; j < POINTERS_PER_INODE; j++){
+				if(inode.inode[i%INODES_PER_BLOCK].direct[j] != 0){
+					data_bitmap[inode.inode[i%INODES_PER_BLOCK].direct[j]] = 1;
+
+				}
+			}
+			if(inode.inode[i%INODES_PER_BLOCK].indirect != 0){
+
+				data_bitmap[inode.inode[i%INODES_PER_BLOCK].indirect] = 1;
+				union fs_block indirect;
+				disk_read(inode.inode[i%INODES_PER_BLOCK].indirect, indirect.data);
+				for(int j = 0; j < POINTERS_PER_BLOCK; j++){
+					if(indirect.pointers[j] != 0){
+						data_bitmap[indirect.pointers[j]] = 1;
+
+					}
+				}
+			}
+		}
+	}
+
+	data_bitmap[0] = 1;
+	for(int i = 0; i < block.super.ninodeblocks; i++)
+		data_bitmap[i+1] = 1;
 
 	MOUNTED = true;
+
+	#if MOUNT_TRAIT == 1
+		for(auto i : data_bitmap)
+			std::cout << i;
+		std::cout << " --> data_bitmap" << std::endl;
+		for(auto i : inode_bitmap)
+			std::cout << i;
+		std::cout << " --> inode_bitmap" << std::endl;
+	#endif
+
+
 	return 1;
 }
 
@@ -352,19 +490,21 @@ int fs_getsize (int inumber) {
 
 		disk_read (inumber/INODES_PER_BLOCK + 1, _inode.data);
 
+		//pega o tamanaho dos blocos diretos
 		for (unsigned int _direct = 0; _direct < POINTERS_PER_INODE; _direct++) {
 			if (_inode.inode [inumber%INODES_PER_BLOCK].direct[_direct]) _n_blocks++;
 		}
 
+		//pega os tamanhos dos indiretos caso haja indiretos
 		if (_inode.inode[(inumber % static_cast <int> (INODES_PER_BLOCK))].indirect != 0) {
-			std::cout << "	piahedaoqujshfdoiuashdoiashd" << std::endl;
 			union fs_block _indirect;
 			disk_read (_inode.inode[(inumber % static_cast <int> (INODES_PER_BLOCK))].indirect, _indirect.data);
 			for (unsigned int n_indirect = 0; n_indirect < POINTERS_PER_BLOCK; n_indirect++) {
 				if (_indirect.pointers[n_indirect]) _n_blocks++;
 			}
 		}
-		return _n_blocks*4096;
+		//retorna no numero de blocos vezes o tamanho dos blocos
+		return _n_blocks*DISK_BLOCK_SIZE;
 	}
 
 	return -1;
@@ -471,55 +611,189 @@ int fs_read (int inumber, char *data, int length, int offset) {
 	return iterator;
 }
 
-int fs_write (int inumber, const char *data, int length, int offset) {
-	//
-	// if (MOUNTED == false) {
-	// 	std::cout << "Error: please mount first!" << std::endl;
-	// 	return -1;
-	// }
-	//
-	union fs_block _block;
+int empty_space () {
+	for (int i = 0; i < bitmap.size(); i++) {
+		if (bitmap[i] == 0) {
+			bitmap[i] = 1;
+			return i;
+		}
+	}
+	return -1;
+}
 
+void update_size(int inumber,int offset, int length){
+	union fs_block inode;
+	disk_read(inumber/INODES_PER_BLOCK + 1, inode.data);
+	int inode_index = inumber % INODES_PER_BLOCK;
+
+	int sizelimit_block = inode.inode[inode_index].size / DISK_BLOCK_SIZE;
+	int sizelimit_byte = inode.inode[inode_index].size % DISK_BLOCK_SIZE;
+
+	int end_block = (offset + length) / DISK_BLOCK_SIZE;
+	int end_byte = (offset + length) % DISK_BLOCK_SIZE;
+
+	if(sizelimit_block == end_block){
+		if(sizelimit_byte < end_byte){
+			inode.inode[inode_index].size += end_byte - sizelimit_byte;
+
+			disk_write(inumber/INODES_PER_BLOCK + 1, inode.data);
+		}
+	} else if(sizelimit_block < end_block){
+		inode.inode[inode_index].size += (end_block - sizelimit_block) * DISK_BLOCK_SIZE + (end_byte - sizelimit_byte);
+
+		disk_write(inumber/INODES_PER_BLOCK + 1, inode.data);
+	}
+}
+
+int fs_write( int inumber, const char *data, int length, int offset )
+{
+
+	//checa se o arquivo foi montado
+	if (!MOUNTED) {
+		std::cout << "Error: disk not monted!" << std::endl;
+		return -1;
+	}
+
+	//checa se data nao eh null
+	if (!data) {
+		std::cout << "Error: invalid file" << std::endl;
+	}
+
+
+	//checa se inumber eh valido
+	union fs_block _block;
 	disk_read (0, _block.data);
 	if (inumber == 0 || inumber > _block.super.ninodes) {
-		std::cout << "Erros: inumber invalid!" << std::endl;
-		return 0;
+		std::cout << "Error: invalid inode" << std::endl;
+		return -1;
 	}
-
-	if (!data) {
-		std::cout << "Erro: data invalid" << std::endl;
-		return 0;
-	}
-
-	bool all_bytes = false;
-
-	if (length%DISK_BLOCK_SIZE == 0) all_bytes = true;
 
 	union fs_block _inode;
+	//le o respectivo inodo de inumber
+	disk_read (1 + (inumber/INODES_PER_BLOCK), _inode.data);
+
+	//checa se o inodo eh valido
+	if (!_inode.inode[inumber%INODES_PER_BLOCK].isvalid) {
+		std::cout << "Error: invalid inode" << std::endl;
+		return -1;
+	}
+
+	//checa se náo cabe mais nada no inodo
+	if (offset > _inode.inode[inumber%INODES_PER_BLOCK].size) return -1;
+
+	int bytes_write = DISK_BLOCK_SIZE;		//bytes a ser escrito
+	int iterator = 0;					//posicao do inodo que estou escrevendo (sem offset
+	int _empty_space = 0;			//variavel para guardar os espacos vazios
 
 	union fs_block _data_block;
 
-	disk_read (1 + (inumber/INODES_PER_BLOCK), _inode.data);
+	//para cada um dos diretos
+	for(unsigned int _direct = offset/DISK_BLOCK_SIZE; _direct < POINTERS_PER_INODE; _direct++) {
 
-	int iterator = 0;
-	int last_block = 0;
 
-	if (offset/DISK_BLOCK_SIZE < 5) {
-		for (int i = offset/DISK_BLOCK_SIZE; i < 5; i++) {
+		if (!_inode.inode[inumber%INODES_PER_BLOCK].direct[_direct]) {
+			_empty_space = empty_space ();
+			if (_empty_space == -1) {
+				update_size(inumber, offset, iterator);
+				std::cout << "Erro: No space" << std::endl;
+				return iterator;
+			}
+			//grava o valor do ponteiro no disco
+			_inode.inode[inumber%INODES_PER_BLOCK].direct[_direct] = _empty_space;
+			disk_write(1 + (inumber/INODES_PER_BLOCK), _inode.data);
+		}
 
-			disk_read(_inode.inode[inumber%INODES_PER_BLOCK].direct[i], _data_block.data);
-			std::memcpy(&_data_block.data, &data[iterator], DISK_BLOCK_SIZE);
-			iterator += DISK_BLOCK_SIZE;
+		//checa o tamanho a copiar e passa pra bytes_write com maximo de 4096
+		if (bytes_write > length) bytes_write = length;
+
+		//zera o bloco de dados para copiar em cima
+		for (int i = 0; i < bytes_write; i++) {
+			_data_block.data[i] = 0;
+		}
+
+		//copia os dados e escreve no disco
+		std::memcpy(&_data_block.data[0], &data[iterator], bytes_write);
+		disk_write(_inode.inode[inumber%INODES_PER_BLOCK].direct[_direct], _data_block.data);
+
+		//atualiza as variaveis de controle
+		iterator += bytes_write;
+		length -= bytes_write;
+
+		if(!length) break;
+	}
+
+	//blocos indiretos se ainda faltar coisa pra escrever
+	if (length > 0) {
+
+		//checa quantos blocos ainda estao disponiveis
+		int left = 0;
+		for (unsigned int i = 0; i < sizeof(data_bitmap); i++) {
+			if (data_bitmap[i]) left++;
+		}
+
+		union fs_block _indirect_block;
+
+		//caso nao exista blocos indiretos
+		if (!_inode.inode[inumber%INODES_PER_BLOCK].indirect) {
+
+
+			//caso nao existe os diretos, procura espaco vazio e atribui o ipointer para o direto.
+			_empty_space = empty_space ();
+			if (_empty_space == -1 || !left) {
+				std::cout << "" << std::endl;
+				update_size (inumber,offset, iterator);
+				return iterator;
+			}
+			//escreve o valor do ponteiro no disco
+			_inode.inode[inumber%INODES_PER_BLOCK].indirect = _empty_space;
+			disk_write (1 + (inumber/INODES_PER_BLOCK), _inode.data);
+		}
+
+		disk_read (_inode.inode[inumber%INODES_PER_BLOCK].indirect, _indirect_block.data);
+
+		//calcula o numero do bloco indireto baseado no offset
+		int indirect_initial = 0;
+		indirect_initial = ((offset + iterator)/DISK_BLOCK_SIZE - 5);
+
+		for (unsigned int _indirect = indirect_initial; _indirect < POINTERS_PER_BLOCK; _indirect++) {
+			//caso nao tenha ponteiro indiretos na posicao indirect
+			if (!_indirect_block.pointers[_indirect]) {
+				//acha um espaco vazio
+				_empty_space = empty_space ();
+				//caso nao tenha espaco vazio
+				if (_empty_space == -1) {
+					update_size (inumber,offset, iterator);
+					std::cout << "Erro: No space" << std::endl;
+					return iterator;
+				}
+				//atribui o valor vazio achado para o ponteiro
+				_indirect_block.pointers[_indirect] = _empty_space;
+				//escreve o data no bloco indireto
+				disk_write (_inode.inode[inumber%INODES_PER_BLOCK].indirect, _indirect_block.data);
+			}
+
+			//atualiza o numero de bytes a ser escrito
+			if (bytes_write > length) bytes_write = length;
+
+						//zera o bloco de dados para copiar em cima
+			for (int i = 0; i < bytes_write; i++){
+				_data_block.data[i] = 0;
+			}
+
+			//copia os dados e escreve no disco
+			std::memcpy (&_data_block.data[0], &data[iterator], bytes_write);
+			disk_write (_indirect_block.pointers[_indirect], _data_block.data);
+
+			//atualiza as variaveis de controle
+			length -= bytes_write;
+			iterator += bytes_write;
+
+			//caso nao tenha mais nada para copiar, sai do loop
+			if (!length) break;
 		}
 	}
 
-
-
-
-
-
-	//union fs_block _data_block;
-
-
-	return 0;
+	//atualiza o tamanho do inode
+	update_size (inumber, offset, iterator);
+	return iterator;
 }
