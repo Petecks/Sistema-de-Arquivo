@@ -379,7 +379,6 @@ int fs_read (int inumber, char *data, int length, int offset) {
 		return -1;
 	}
 
-
 	union fs_block _block;
 
 	disk_read (0, _block.data);
@@ -387,10 +386,7 @@ int fs_read (int inumber, char *data, int length, int offset) {
 		std::cout << "Erros: inumber invalid!" << std::endl;
 		return 0;
 	}
-
 	union fs_block _inode;
-
-
 	disk_read (1 + (inumber/INODES_PER_BLOCK), _inode.data);
 
 	//offset/DISK_BLOCK_SIZE -- numero do bloco inicial
@@ -398,106 +394,79 @@ int fs_read (int inumber, char *data, int length, int offset) {
 	//inumber % INODES_PER_BLOCK -- inodo a ler
 
 	union fs_block _data_block;
+	bool perfect_div = false;
+	unsigned int number_of_blocks = _inode.inode[inumber%INODES_PER_BLOCK].size/DISK_BLOCK_SIZE;
+	if (_inode.inode[inumber%INODES_PER_BLOCK].size%DISK_BLOCK_SIZE == 0) {
+		perfect_div = true;
+	} else {
+		number_of_blocks += 1;
+	}
 	//numero de bytes que falta ler
 	int bytes_remaining = _inode.inode[inumber%INODES_PER_BLOCK].size - offset;
-	int bytes_read = 0;					//numero de bytes lido
-	int iterator = 0;			//posição que esta sendo lida
-	int partial_offset = offset%DISK_BLOCK_SIZE;		//offset dentro do bloco de dados depois da primeira vez
-	// int block_turn = offset/DISK_BLOCK_SIZE;			//numero do bloco a ler na iteracao
+	unsigned int bytes_read = DISK_BLOCK_SIZE;					//numero de bytes lido
 
+	int iterator = 0;			//posição que esta sendo lida
+	//int partial_offset = offset%DISK_BLOCK_SIZE;		//offset dentro do bloco de dados depois da primeira vez
 
 	//le os blocos diretos a partir de um bloco inicial calculado pelo offset. Se nao for no diresto, apenas nao entra no for
-	for (int initial_block = offset/DISK_BLOCK_SIZE; initial_block < static_cast <int> (POINTERS_PER_INODE); initial_block++) {
+	for (unsigned int initial_block = offset/DISK_BLOCK_SIZE; initial_block < POINTERS_PER_INODE; initial_block++) {
 
-		if(!length || !bytes_remaining) break;
+		if(length <= 0 || bytes_remaining <= 0) break;
 
 		if (_inode.inode[inumber%INODES_PER_BLOCK].direct[initial_block]) {
 
-			//se for o ultimo bloco
-			if(length - partial_offset > bytes_remaining) {
-				bytes_read = bytes_remaining;
-			} else {
-			//se length menos numero de bytes inicial dentro do bloco eh maior que o tamanho padrao do bloco
-				if (length - partial_offset > static_cast <int> (DISK_BLOCK_SIZE)) {
-					bytes_read = DISK_BLOCK_SIZE - partial_offset;
-				}
-				else {
-					//caso geral
-					bytes_read = length - partial_offset;
-				}
+			if (_inode.inode[inumber%INODES_PER_BLOCK].size < (initial_block + 1)*(DISK_BLOCK_SIZE)) {
+				bytes_read = DISK_BLOCK_SIZE - ((initial_block + 1)*(DISK_BLOCK_SIZE) -  _inode.inode[inumber%INODES_PER_BLOCK].size);
 			}
 
-			//atualiza os bytes restantes e o tamanho restante
-			bytes_remaining = bytes_remaining - bytes_read;
-			length = length - bytes_read;
-
+			length -= bytes_read;
+			bytes_remaining -= bytes_read;
 
 			//le o respectivo bloco direto
 			disk_read(_inode.inode[inumber%INODES_PER_BLOCK].direct[initial_block], _data_block.data);
 
 			//copia para buffer o tanto de bytes a ser lido (byte_read)
-			std::memcpy(&data[iterator], &_data_block.data[partial_offset], bytes_read);
-
-			//zera o offset de bo bloco
-			partial_offset = 0;
+			std::memcpy(&data[iterator], &_data_block.data[0], bytes_read);
 
 			//atualiza o iterator
-			iterator = iterator + bytes_read;
-			// block_turn++;
-		}
-}
-
-	if (_inode.inode[inumber%INODES_PER_BLOCK].indirect && (length > 0)) {
-
-		// declada a nova union para acessar os ponteiros indiretos.
-		union fs_block _indirect_block;
-		// leitura da estrutura de blocos indiretos.
-		disk_read(_inode.inode[inumber%INODES_PER_BLOCK].indirect,_indirect_block.data);
-		// laço para cada bloco de dado indireto sendo imprimido (se houver)
-
-		int indirect_initial = 0;
-
-		if (offset/DISK_BLOCK_SIZE > 5) indirect_initial = offset/DISK_BLOCK_SIZE;
-		for (unsigned int _indirect = indirect_initial; _indirect < POINTERS_PER_BLOCK; _indirect++) {
-
-			bytes_read = length - partial_offset;
-			//se for o ultimo bloco
-			//se length menos numero de bytes inicial dentro do bloco eh maior que o tamanho padrao do bloco
-				if (length - partial_offset > static_cast <int> (DISK_BLOCK_SIZE)) {
-					bytes_read = DISK_BLOCK_SIZE - partial_offset;
-				}
-
-
-			if (length - partial_offset > bytes_remaining) {
-				bytes_read = bytes_remaining;
-			}
-
-
-			union fs_block _indirect_data;
-
-			//le o respectivo bloco indireto
-			disk_read(_indirect_block.pointers[_indirect], _indirect_data.data);
-
-
-			if (_indirect_data.pointers[_indirect])	{
-
-
-				//copia para buffer o tanto de bytes a ser lido (byte_read)
-				std::memcpy(&data[iterator], &_indirect_data.data[partial_offset], bytes_read);
-
-				bytes_remaining = bytes_remaining - bytes_read;
-				length = length - bytes_read;
-
-				partial_offset = 0;
-
-				//atualiza o iterator
-				iterator = iterator + bytes_read;
-				// block_turn++;
-				//if(!length || !bytes_remaining) break;
-			}
-			else break;
+			iterator += bytes_read;
 		}
 	}
+
+	bytes_read = DISK_BLOCK_SIZE;
+
+
+	if (_inode.inode[inumber%INODES_PER_BLOCK].indirect && (length > 0)) {
+			// declada a nova union para acessar os ponteiros indiretos.
+			union fs_block _indirect_block;
+			// leitura da estrutura de blocos indiretos.
+			disk_read(_inode.inode[inumber%INODES_PER_BLOCK].indirect, _indirect_block.data);
+			int indirect_initial = 0;
+
+			indirect_initial = ((offset + iterator)/DISK_BLOCK_SIZE - 5);
+			for (unsigned int _indirect = indirect_initial; _indirect < indirect_initial + 4; _indirect++) {
+
+				if(length <= 0 || bytes_remaining <= 0) break;
+
+				if (((offset + iterator)/DISK_BLOCK_SIZE == number_of_blocks - 1) && !perfect_div) {
+					bytes_read = DISK_BLOCK_SIZE - ((number_of_blocks)*(DISK_BLOCK_SIZE) - (_inode.inode[inumber%INODES_PER_BLOCK].size));
+				}
+
+				union fs_block _indirect_data;
+				//le o respectivo bloco indireto
+				disk_read(_indirect_block.pointers[_indirect], _indirect_data.data);
+
+				std::cout << "indirect: " << _indirect << std::endl;
+				//copia para buffer o tanto de bytes a ser lido (byte_read)
+				std::memcpy(&data[iterator], &_indirect_data.data[0], bytes_read);
+
+				bytes_remaining -= bytes_read;
+				length -= bytes_read;
+
+				//atualiza o iterator
+				iterator += bytes_read;
+			}
+		}
 
 	return iterator;
 }
